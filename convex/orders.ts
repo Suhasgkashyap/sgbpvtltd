@@ -178,6 +178,8 @@ export const confirmShipping = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
     await ctx.db.patch(args.orderId, {
       status: "shipped",
       shippedBy: userId,
@@ -192,6 +194,12 @@ export const confirmShipping = mutation({
       notes: args.notes,
       shippedBy: userId,
     });
+    // Return order info so frontend can open WhatsApp
+    return {
+      customerName: order.customerName,
+      whatsappNumber: order.whatsappNumber ?? order.customerPhone,
+      orderNumber: order.orderNumber,
+    };
   },
 });
 

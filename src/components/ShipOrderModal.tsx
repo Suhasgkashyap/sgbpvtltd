@@ -21,6 +21,38 @@ function generateTrackingId(provider: string): string {
   return `${prefix}-${rand}`;
 }
 
+function buildWhatsAppMessage(
+  customerName: string,
+  orderNumber: string,
+  providerLabel: string,
+  trackingId: string,
+  estimatedDelivery?: string
+): string {
+  const lines = [
+    `Hello ${customerName}! 🎉`,
+    `Your order *${orderNumber}* has been shipped! 🚚`,
+    ``,
+    `🏢 Shipping Provider: ${providerLabel}`,
+    `🔍 Tracking ID: *${trackingId}*`,
+    estimatedDelivery ? `📅 Estimated Delivery: ${estimatedDelivery}` : null,
+    ``,
+    `Thank you for shopping with *SGB Pvt. Ltd.*! 🙏`,
+    `For any queries, reply to this message.`,
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+  return lines;
+}
+
+function openWhatsApp(phone: string, message: string) {
+  // Normalize: remove spaces/dashes, add +91 if no country code
+  let number = phone.replace(/[\s\-]/g, "");
+  if (!number.startsWith("+")) number = "91" + number;
+  else number = number.slice(1); // remove + for wa.me URL
+  const url = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+  window.open(url, "_blank");
+}
+
 export function ShipOrderModal({ orderId, onClose }: Props) {
   const confirmShipping = useMutation(api.orders.confirmShipping);
   const orderData = useQuery(api.orders.getById, { orderId });
@@ -31,7 +63,6 @@ export function ShipOrderModal({ orderId, onClose }: Props) {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Set provider from order data when it loads
   useEffect(() => {
     if (orderData?.shippingProvider) {
       setProvider(orderData.shippingProvider);
@@ -46,14 +77,28 @@ export function ShipOrderModal({ orderId, onClose }: Props) {
     if (!trackingId.trim()) return;
     setSubmitting(true);
     try {
-      await confirmShipping({
+      const result = await confirmShipping({
         orderId,
         provider,
         trackingId,
         estimatedDelivery: estimatedDelivery || undefined,
         notes: notes || undefined,
       });
+
       toast.success("Order shipped successfully!");
+
+      // Open WhatsApp Web with pre-filled message
+      if (result?.whatsappNumber) {
+        const message = buildWhatsAppMessage(
+          result.customerName,
+          result.orderNumber,
+          providerInfo[provider].label,
+          trackingId,
+          estimatedDelivery || undefined
+        );
+        openWhatsApp(result.whatsappNumber, message);
+      }
+
       onClose();
     } catch {
       toast.error("Failed to ship order");
